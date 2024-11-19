@@ -1,0 +1,6 @@
+{
+  "retry_policy": {
+    "max_attempts": 3,
+    "timeout_seconds": 60
+  }
+}
