@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 def initiate_call(patient_data):
     retry_count = 0
 
-    while retry_count < config.MAX_RETRIES:
+    while retry_count < config.retry_policy.max_attempts:
         try:
             logging.info(f"Initiating call for patient {patient_data['id']}...")
             call = client.calls.create(
