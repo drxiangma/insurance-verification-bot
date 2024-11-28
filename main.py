@@ -9,7 +9,7 @@ def main():
         logger = logging.getLogger(__name__)
 
         # Load input data
-        input_file = "templates/input_template.xlsx"
+        input_file = "input/input_template.xlsx"
         logger.info(f"Reading input data from {input_file}")
         patient_data = data_processor.read_excel(input_file)
 
@@ -32,7 +32,7 @@ def main():
                 })
 
         # Export results
-        output_file = "templates/output_template.xlsx"
+        output_file = "output/output_template.xlsx"
         logger.info(f"Writing results to {output_file}")
         data_processor.write_excel(results, output_file)
 
