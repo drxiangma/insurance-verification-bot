@@ -6,52 +6,72 @@ import logging
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 import json
+from typing import Dict, Any
 
-# Load config.json for Key Vault URL and other non-sensitive configs
-with open("config.json", "r") as config_file:
-    config = json.load(config_file)
+logger = logging.getLogger(__name__)
 
-key_vault_url = config["key_vault_url"]
+class CallHandler:
+    def __init__(self):
+        # Load config
+        with open("config.json", "r") as config_file:
+            self.config = json.load(config_file)
 
-# Initialize the Key Vault client
-credential = DefaultAzureCredential()
-client = SecretClient(vault_url=key_vault_url, credential=credential)
+        # Initialize Key Vault
+        self.credential = DefaultAzureCredential()
+        self.secret_client = SecretClient(
+            vault_url=self.config["key_vault_url"],
+            credential=self.credential
+        )
 
-# Fetch secrets
-AZURE_SPEECH_KEY = secret_client.get_secret("AZURE_SPEECH_KEY").value
-AZURE_REGION = secret_client.get_secret("AZURE_REGION").value
-TWILIO_ACCOUNT_SID = secret_client.get_secret("TWILIO_ACCOUNT_SID").value
-TWILIO_AUTH_TOKEN = secret_client.get_secret("TWILIO_AUTH_TOKEN").value
+        # Initialize Twilio client
+        self.twilio_client = Client(
+            self.get_secret("TWILIO_ACCOUNT_SID"),
+            self.get_secret("TWILIO_AUTH_TOKEN")
+        )
 
-logging.basicConfig(level=logging.INFO)
+    def get_secret(self, secret_name: str) -> str:
+        return self.secret_client.get_secret(secret_name).value
 
-def initiate_call(patient_data):
-    retry_count = 0
+    def initiate_call(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        retry_count = 0
+        max_retries = self.config.get("retry_policy", {}).get("max_attempts", 3)
 
-    while retry_count < config.retry_policy.max_attempts:
-        try:
-            logging.info(f"Initiating call for patient {patient_data['id']}...")
-            call = client.calls.create(
-                url="http://your-azure-function-url.com/process_call",
-                to=patient_data["insurance_phone"],
-                from_="+YourTwilioNumber"
-            )
-            return {"patient_id": patient_data["id"], "call_status": "Initiated", "call_sid": call.sid}
-        except Exception as e:
-            retry_count += 1
-            logging.error(f"Call initiation failed for patient {patient_data['id']}: {e}")
-            time.sleep(5)
+        while retry_count < max_retries:
+            try:
+                logger.info(f"Initiating call for patient {patient_data['id']}")
+                call = self.twilio_client.calls.create(
+                    url=self.config["azure_function_url"],
+                    to=patient_data["insurance_phone"],
+                    from_=self.config["twilio_number"]
+                )
+                return {
+                    "patient_id": patient_data["id"],
+                    "call_status": "Initiated",
+                    "call_sid": call.sid
+                }
+            except Exception as e:
+                retry_count += 1
+                logger.error(f"Call initiation failed (attempt {retry_count}): {str(e)}")
+                time.sleep(self.config.get("retry_policy", {}).get("delay_seconds", 5))
 
-    return {"patient_id": patient_data["id"], "call_status": "Failed"}
-
-def process_call(patient_data):
-    try:
-        response = nlp.interact_with_human_representative(patient_data)
         return {
             "patient_id": patient_data["id"],
-            "call_status": "Completed",
-            "details": response
+            "call_status": "Failed",
+            "error": "Max retry attempts reached"
         }
-    except Exception as e:
-        logging.error(f"Error during call processing for patient {patient_data['id']}: {e}")
-        return {"patient_id": patient_data["id"], "call_status": "Error"}
+
+    def process_call(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            response = nlp.interact_with_human_representative(patient_data)
+            return {
+                "patient_id": patient_data["id"],
+                "call_status": "Completed",
+                "details": response
+            }
+        except Exception as e:
+            logger.error(f"Call processing failed: {str(e)}")
+            return {
+                "patient_id": patient_data["id"],
+                "call_status": "Error",
+                "error": str(e)
+            }
