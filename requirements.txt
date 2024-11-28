@@ -1,2 +1,11 @@
+azure-cognitiveservices-speech
+azure-cognitiveservices-language-textanalytics
 azure-identity
 azure-keyvault-secrets
+twilio
+pandas
+openpyxl
+pydub
+requests
+python-dotenv
+python-json-logger
